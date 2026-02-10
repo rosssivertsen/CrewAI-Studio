@@ -6,7 +6,7 @@ from langchain_groq import ChatGroq
 from langchain_anthropic import ChatAnthropic
 from crewai import LLM
 
-def load_secrets_fron_env():
+def load_secrets_from_env():
     load_dotenv(override=True)
     if "env_vars" not in st.session_state:
         st.session_state.env_vars = {
