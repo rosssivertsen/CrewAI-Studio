@@ -3,6 +3,9 @@ import string
 from streamlit import markdown
 import markdown as md
 from datetime import datetime
+import re
+from crewai import TaskOutput
+
 
 def rnd_id(length=8):
     characters = string.ascii_letters + string.digits
@@ -25,6 +28,7 @@ def fix_columns_width():
             </style>
             """, unsafe_allow_html=True)
 
+
 def generate_printable_view(crew_name, result, inputs, formatted_result, created_at=None):
     """
     Generates a simple HTML view for printing.
@@ -32,7 +36,14 @@ def generate_printable_view(crew_name, result, inputs, formatted_result, created
     if created_at is None:
         created_at = datetime.now().isoformat()
     created_at_str = datetime.fromisoformat(created_at).strftime('%Y-%m-%d %H:%M:%S')
-    markdown_html = md.markdown(formatted_result)
+    
+    fixed_md = normalize_list_indentation(formatted_result)
+
+    # Convert Markdown -> HTML
+    markdown_html = md.markdown(
+        fixed_md,
+        extensions=['markdown.extensions.extra']  # optional: extra for tables, code, sane_lists
+    )
 
     html_content = f"""
     <html>
@@ -98,7 +109,7 @@ def generate_printable_view(crew_name, result, inputs, formatted_result, created
             </div>
             <div class="section">
                 <h2>Inputs</h2>
-                {''.join(f'<div class="input-item"><strong>{k}:</strong> {v}</div>' for k, v in inputs.items())}
+                {''.join(f'<div class="input-item"><strong>{k}:</strong><br><pre>{v}</pre></div>' for k, v in inputs.items())}
             </div>
             <div class="page-break"></div>
             <div class="section">
@@ -126,3 +137,39 @@ def format_result(result):
                 return result['result'].raw
         return str(result)
     return str(result)
+
+def normalize_list_indentation(md_text: str) -> str:
+    """
+    Converts lines starting with multiples of 2 spaces (AI-generated) into
+    multiples of 4 spaces so Python-Markdown sees nested lists correctly.
+    Preserves both '-' and '*' bullets.
+    """
+    import re
+    normalized_lines = []
+    for line in md_text.splitlines():
+        # match lines with leading spaces, then '*' or '-' bullet
+        m = re.match(r'^(?P<spaces> +)(?P<bullet>[-*])\s+(.*)$', line)
+        if m:
+            spaces = len(m.group('spaces'))
+            level = spaces // 2  # AI indent levels (2 spaces each)
+            new_indent = ' ' * (level * 4)
+            bullet = m.group('bullet')
+            content = m.group(3)
+            normalized_lines.append(f"{new_indent}{bullet} {content}")
+        else:
+            normalized_lines.append(line)
+    return "\n".join(normalized_lines)
+
+
+def get_tasks_outputs_str(tasks_output: list[TaskOutput | str], tasks: list = None):
+    """Return a formatted string of task outputs, optionally including task descriptions."""
+    strRes = ""
+    for idx, task_output in enumerate(tasks_output):
+        val = task_output.raw if isinstance(task_output, TaskOutput) else task_output
+        desc = ""
+        if tasks and idx < len(tasks):
+            task = tasks[idx]
+            desc = getattr(task, "description", str(task))
+        title = f"#  {desc}" if desc else "#  TASK"
+        strRes += f"\n\n{title}\n{val}\n\n==========\n"
+    return strRes

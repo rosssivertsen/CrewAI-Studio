@@ -83,10 +83,14 @@ Task(
         placeholders_dict = ", ".join([f'{json_dumps_python(placeholder)}: {placeholder}' for placeholder in placeholders])
 
         manager_llm_definition = ""
+        planning_llm_definition = ""
         if crew.process == Process.hierarchical and crew.manager_llm:
             manager_llm_definition = f'manager_llm=create_llm({json_dumps_python(crew.manager_llm)})'
         elif crew.process == Process.hierarchical and crew.manager_agent:
             manager_llm_definition = f'manager_agent=next(agent for agent in agents if agent.role == {json_dumps_python(crew.manager_agent.role)})'
+        
+        if crew.planning and crew.planning_llm:
+            planning_llm_definition = f'planning_llm=create_llm({json_dumps_python(crew.planning_llm)})'
         
         app_content = f"""
 import streamlit as st
@@ -192,7 +196,9 @@ def main():
         memory={json_dumps_python(crew.memory)}, 
         cache={json_dumps_python(crew.cache)}, 
         max_rpm={json_dumps_python(crew.max_rpm)},
-        {manager_llm_definition}
+        planning={json_dumps_python(crew.planning)},
+        {manager_llm_definition}{',' if manager_llm_definition and planning_llm_definition else ''}
+        {planning_llm_definition}
     )
 
     {placeholder_inputs}
@@ -346,6 +352,8 @@ streamlit run app.py --server.headless true
             'verbose': crew.verbose,
             'memory': crew.memory,
             'cache': crew.cache,
+            'planning': crew.planning,
+            'planning_llm': crew.planning_llm,
             'max_rpm': crew.max_rpm,
             'manager_llm': crew.manager_llm,
             'manager_agent': crew.manager_agent.id if crew.manager_agent else None,
@@ -382,6 +390,7 @@ streamlit run app.py --server.headless true
                 'async_execution': task.async_execution,
                 'agent_id': task.agent.id if task.agent else None,
                 'context_from_async_tasks_ids': task.context_from_async_tasks_ids,
+                'context_from_sync_tasks_ids': task.context_from_sync_tasks_ids,
                 'created_at': task.created_at
             }
             crew_data['tasks'].append(task_data)
@@ -438,7 +447,8 @@ streamlit run app.py --server.headless true
                 expected_output=task_data['expected_output'],
                 async_execution=task_data['async_execution'],
                 agent=next((agent for agent in agents if agent.id == task_data['agent_id']), None),
-                context_from_async_tasks_ids=task_data['context_from_async_tasks_ids'],
+                context_from_async_tasks_ids=task_data.get('context_from_async_tasks_ids', None),
+                context_from_sync_tasks_ids=task_data.get('context_from_sync_tasks_ids', None),
                 created_at=task_data['created_at']
             )
             tasks.append(task)
@@ -452,6 +462,8 @@ streamlit run app.py --server.headless true
             verbose=crew_data['verbose'],
             memory=crew_data['memory'],
             cache=crew_data['cache'],
+            planning=crew_data.get('planning', False),
+            planning_llm=crew_data.get('planning_llm'),
             max_rpm=crew_data['max_rpm'],
             manager_llm=crew_data['manager_llm'],
             manager_agent=next((agent for agent in agents if agent.id == crew_data['manager_agent']), None),
